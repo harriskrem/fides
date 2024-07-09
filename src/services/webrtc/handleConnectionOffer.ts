@@ -9,7 +9,6 @@ type HandleConnectionOffer = {
 
 export default async function handleConnectionOffer(props: HandleConnectionOffer) {
   const { pc, offer, socket, peerId } = props;
-  console.log('in handleConnectionOffer')
   await pc.setRemoteDescription(offer);
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);

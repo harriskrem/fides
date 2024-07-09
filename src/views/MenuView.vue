@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import TabPanels from '../components/TabPanels.vue'
+import TabPanels from "./Tabs/TabPanels.vue";
 </script>
 
 <template>

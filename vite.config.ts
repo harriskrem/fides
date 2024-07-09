@@ -1,5 +1,4 @@
 import { fileURLToPath, URL } from 'node:url'
-
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import VueDevTools from 'vite-plugin-vue-devtools'
@@ -21,7 +20,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/socket.io/': {
-        target: 'https://192.168.1.3:3000',
+        target: 'https://192.168.1.2:3000',
         changeOrigin: true,
         secure: false,
         ws: true
