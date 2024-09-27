@@ -20,7 +20,7 @@ export default defineConfig({
     host: true,
     proxy: {
       '/socket.io/': {
-        target: 'https://192.168.1.2:3000',
+        target: 'https://192.168.1.4:3000',
         changeOrigin: true,
         secure: false,
         ws: true

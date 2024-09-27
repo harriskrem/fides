@@ -1,25 +1,32 @@
 <script setup lang="ts">
 import { ScanQrIcon } from "@/assets/icons";
-import { ref } from "vue";
 import ModalScanQr from "@/components/modal/ScanQr.vue";
+import { useDataStore } from "@/store/dataStore";
+import { usePeerStore } from "@/store/peerStore";
+import { computed, ref, toRefs } from "vue";
 
-const { isSendButtonDisabled, dataSentSize, selectedFile } = defineProps<{
+const props = defineProps<{
   isSendButtonDisabled: boolean;
   onQrDetect: (a: any[]) => void;
   onHandleSendButton: () => void;
   onHandleFileSelection: (a: Event) => void;
-  dataSentSize: number;
   selectedFile: File | undefined;
 }>();
+const { isSendButtonDisabled, selectedFile } = toRefs(props);
+
 const emit = defineEmits<{
   (e: "handleSendButton"): void;
   (e: "qrDetect", a: any[]): void;
   (e: "handleFileSelection", a: Event): void;
 }>();
-const foreignCode = defineModel({
-  type: String,
-  required: true,
-});
+
+const dataStore = useDataStore();
+const dataSentSize = computed(() => dataStore.dataSentSize)
+const peer = usePeerStore();
+const remoteId = computed({
+  get: () => peer.remoteId,
+  set: (value: string) => peer.setRemoteId(value)
+})
 
 const scanQr = ref(false);
 const toggleScan = () => (scanQr.value = !scanQr.value);
@@ -44,7 +51,7 @@ const handleOnQrDetect = (detectedCodes: any[]) => {
   <div class="my-2">
     <label class="input input-bordered flex items-center gap-2">
       <input
-        v-model="foreignCode"
+        v-model="remoteId"
         type="text"
         class="grow"
         placeholder="Type other peer's code"

@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { ScanQrIcon, CopyIcon, CopySuccessIcon } from "@/assets/icons";
-import type { FileDescription } from "@/types/FileDescription";
-import { ref } from "vue";
+import { CopyIcon, CopySuccessIcon, ScanQrIcon } from "@/assets/icons";
 import ModalScanQr from "@/components/modal/ScanQr.vue";
+import { useDataStore } from "@/store/dataStore";
+import { computed, ref, toRefs } from "vue";
 
-const { selfCode, receivedFileDesc, dataReceivedSize } = defineProps<{
-  selfCode: string;
-  receivedFileDesc: FileDescription | undefined;
-  dataReceivedSize: number;
+const props = defineProps<{
+  clientId: string;
   onSaveFile: () => void;
 }>();
+const { clientId } = toRefs(props);
 
 defineEmits<{
   (e: "saveFile"): void;
 }>();
-
+const dataStore = useDataStore()
+const receivedDataSize = computed(() => dataStore.receivedDataSize);
+const incomingFileDesc = computed(() => dataStore.incomingFileDesc)
 const checkedURL = ref<boolean>(false);
 const userClicked = ref<boolean>(false);
 const showQrModal = ref<boolean>(false);
@@ -23,9 +24,9 @@ const toggleQrModal = () => (showQrModal.value = !showQrModal.value);
 
 const copyToClipboard = () => {
   if (checkedURL.value) {
-    navigator.clipboard.writeText(`https://tobefilled.tech/${selfCode}`);
+    navigator.clipboard.writeText(`https://tobefilled.tech/${clientId.value}`);
   } else {
-    navigator.clipboard.writeText(selfCode);
+    navigator.clipboard.writeText(clientId.value);
   }
   userClicked.value = true;
   setTimeout(() => (userClicked.value = false), 3000);
@@ -33,16 +34,16 @@ const copyToClipboard = () => {
 
 const getShareCodeForReceive = () => {
   if (checkedURL.value) {
-    return `https://tobefilled.tech/${selfCode}`;
+    return `https://tobefilled.tech/${clientId.value}`;
   }
-  return selfCode;
+  return clientId.value;
 };
 </script>
 
 <template>
   <ModalScanQr
     v-model:show-modal="showQrModal"
-    :self-code="selfCode"
+    :self-code="clientId"
   />
   <div>
     <p class="leading-loose text-md">Receive files</p>
@@ -95,7 +96,7 @@ const getShareCodeForReceive = () => {
     </label>
   </div>
   <div
-    v-if="receivedFileDesc"
+    v-if="incomingFileDesc"
     class="mockup-window border bg-base-300"
   >
     <table class="table">
@@ -108,14 +109,14 @@ const getShareCodeForReceive = () => {
       </thead>
       <tbody>
         <tr>
-          <th>{{ receivedFileDesc.filename }}</th>
-          <th>{{ receivedFileDesc.size }}</th>
+          <th>{{ incomingFileDesc.filename }}</th>
+          <th>{{ incomingFileDesc.size }}</th>
           <th class="sm:w-36">
             <div class="flex justify-center">
               <button
                 v-if="
-                  dataReceivedSize > 0 &&
-                  dataReceivedSize === receivedFileDesc.size
+                  receivedDataSize > 0 &&
+                  receivedDataSize === incomingFileDesc.size
                 "
                 class="btn btn-sm btn-secondary"
                 @click="$emit('saveFile')"
@@ -125,8 +126,8 @@ const getShareCodeForReceive = () => {
               <progress
                 v-else
                 class="progress sm:w-36"
-                :value="dataReceivedSize"
-                :max="receivedFileDesc.size"
+                :value="receivedDataSize"
+                :max="incomingFileDesc.size"
               />
             </div>
           </th>

@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import configuration from "@/config/rtcConfig";
-import {
-  handleConnectionOffer,
-  handleReceivedCandidate,
-  processAnswer,
-  sendOffer,
-} from "@/services/webrtc";
-import { type FileDescription } from "@/types/FileDescription";
-import { io } from "socket.io-client";
-import { ref, watch, watchEffect } from "vue";
+import { setupSocketListeners } from "@/services/socket";
+import { sendOffer } from "@/services/webrtc";
+import { useDataStore } from "@/store/dataStore";
+import { usePeerStore } from "@/store/peerStore";
+import { useSocketStore } from "@/store/socketStore";
+import { computed, ref, watch, watchEffect } from "vue";
 import ReceiveTab from "./tabs/ReceiveTab.vue";
 import SendTab from "./tabs/SendTab.vue";
 
@@ -16,87 +13,46 @@ import SendTab from "./tabs/SendTab.vue";
  *
  * TODO:
  * Add feedback connected or disconnected from user
- * maybe add button to disconnect from user
  * multiple files
+ * Fix issue where cannot send more than 1 times
  **/
+const peerStore = usePeerStore();
+const dataStore = useDataStore();
+const socketStore = useSocketStore()
 
 // WebRTC & socket.io intializations
-const pc = new RTCPeerConnection(configuration);
-const dataChannel = pc.createDataChannel("dataTransfer", {
+let pc = computed(() => peerStore.pc);
+const dataChannel = pc.value.createDataChannel("dataTransfer", {
   ordered: true,
   maxRetransmits: 10,
 });
 dataChannel.binaryType = "arraybuffer";
-const socket = io();
-const selfCode = ref<string>("");
-const foreignCode = ref<string>("");
+
+const clientId = computed(() => peerStore.clientId);
+const remoteId = computed(() => peerStore.remoteId);
+const socket = computed(() => socketStore.getSocket)
 const chunkSize = ref();
 
 // Receive tab
-const receivedFileDesc = ref<FileDescription>();
-const dataReceived = ref<Blob[]>([]);
-const dataReceivedSize = ref<number>(0);
+const receivedData = computed(() => dataStore.receivedData);
+const receivedDataSize = computed(() => dataStore.receivedDataSize);
 const intervalId = ref<any>(null);
 
 // Send Tab
 const selectedFile = ref<File | undefined>();
 const isSendButtonDisabled = ref<boolean>(true);
 const pressedSendButton = ref<boolean>(false);
-const dataSentSize = ref<number>(0);
+const dataSentSize = computed(() => dataStore.dataSentSize);
 
-pc.addEventListener("datachannel", (ev) => {
-  ev.channel.onmessage = function (event) {
-    // if the data is the description or of a file
-    if (typeof event.data === "string") {
-      const data = JSON.parse(event.data);
-      if (data.type === "description") {
-        receivedFileDesc.value = data;
-        console.log("receiving file: ", data);
-        // if the receiver sent the progress
-      } else if (data.type === "progress") {
-        dataSentSize.value = data.progress;
-      }
-      // else if it's a chunk
-    } else {
-      dataReceived.value.push(event.data);
-      dataReceivedSize.value = new Blob(dataReceived.value).size;
-      console.log("dataReceived: ", dataReceived.value.length);
-      console.log("dataReceivedSize: ", dataReceivedSize.value);
-    }
-
-    if (dataReceived.value.length > 0 && intervalId.value === null) {
-      // When received the first chunk initialize an interval
-      // where it sends the received progress to the other peer
-      intervalId.value = setInterval(() => {
-        dataChannel.send(
-          JSON.stringify({
-            type: "progress",
-            progress: dataReceivedSize.value,
-          })
-        );
-      }, 500);
-    }
-  };
-});
-
-pc.addEventListener("icecandidate", ({ candidate }) => {
-  console.log("in icecandidate eventlistener");
-  if (foreignCode.value.length === 20) {
-    socket.emit("send_candidate", {
-      candidate: candidate,
-      peerId: foreignCode.value,
-    });
-  }
-});
-
-// send files when connected
-dataChannel.onopen = () => {
+function sendChunks() {
+  console.log("###### CHANNEL OPENED ######");
   chunkSize.value = Math.min(
-    (pc.sctp as RTCSctpTransport).maxMessageSize,
+    (pc.value.sctp as RTCSctpTransport).maxMessageSize,
     26214
   );
 
   if (selectedFile.value) {
+    console.log("selectedFile: ", selectedFile.value);
     try {
       const file = selectedFile.value;
       const fileReader = new FileReader();
@@ -120,6 +76,7 @@ dataChannel.onopen = () => {
             dataSentSize.value < selectedFile.value.size;
             offset += chunkSize.value
           ) {
+            console.log("dataSentSize: ", dataSentSize.value);
             const chunk = fileData.slice(offset, offset + chunkSize.value);
             console.log("Sending chunk: ", chunk.byteLength);
             dataChannel.send(chunk);
@@ -127,6 +84,8 @@ dataChannel.onopen = () => {
         } else {
           console.error("File could not be read as ArrayBuffer");
           dataChannel.close();
+          pc.value.close();
+          peerStore.setPeerConnection(new RTCPeerConnection(configuration));
         }
       };
       fileReader.onerror = function (e) {
@@ -136,12 +95,77 @@ dataChannel.onopen = () => {
       console.error(error);
     }
   }
-};
+}
+
+function receiveChunk(ev: RTCDataChannelEvent) {
+  ev.channel.onmessage = (event) => {
+    // if the data is the description or of a file
+    if (typeof event.data === "string") {
+      const data = JSON.parse(event.data);
+      if (data.type === "description") {
+        // receivedFileDesc.value = data;
+        dataStore.setFileDescription(data);
+        console.log("receiving file: ", data);
+        // if the receiver sent the progress
+      } else if (data.type === "progress") {
+        // inform the sender the progress
+        dataStore.setDataSentSize(data.progress);
+      }
+      // else if it's a chunk
+    } else {
+      dataStore.setReceivedChunks(event.data);
+      dataStore.setReceivedDataSize(new Blob(receivedData.value).size);
+      console.log("receivedData: ", receivedData.value.length);
+      console.log("receivedDataSize: ", receivedDataSize.value);
+    }
+
+    if (receivedData.value.length > 0 && intervalId.value === null) {
+      // When received the first chunk initialize an interval
+      // where it sends the received progress to the other peer
+      intervalId.value = setInterval(() => {
+        dataChannel.send(
+          JSON.stringify({
+            type: "progress",
+            progress: receivedDataSize.value,
+          })
+        );
+      }, 500);
+    }
+  };
+}
+
+function sendCandidate(candidate: RTCIceCandidate | null) {
+  console.log("in icecandidate eventlistener");
+  if (remoteId.value.length === 20 && pressedSendButton.value) {
+    if (pc.value) {
+      socket.value.emit("send_candidate", {
+        candidate: candidate,
+        peerId: remoteId.value,
+      });
+    }
+  }
+}
+pc.value.addEventListener("iceconnectionstatechange", () => {
+  console.log("state: ", pc.value.iceConnectionState);
+  if (
+    pc.value.iceConnectionState === "connected" ||
+    pc.value.iceConnectionState === "completed"
+  ) {
+    console.log("ICE negotiation successful!");
+  }
+});
+
+// find candidates
+pc.value.addEventListener("icecandidate", (ev) => sendCandidate(ev.candidate));
+// receive chunks
+pc.value.addEventListener("datachannel", (ev) => receiveChunk(ev));
+
+// send chunks when channel is connected
+dataChannel.onopen = () => sendChunks();
 
 const onCameraDetect = (detectedCode: any[]) => {
   console.log("detectedCode: ", detectedCode[0]);
-  // @ts-ignore
-  foreignCode.value = detectedCode[0].rawValue;
+  peerStore.setRemoteId(detectedCode[0].rawValue);
 };
 
 const onFileSelection = (event: Event) => {
@@ -154,71 +178,37 @@ const onFileSelection = (event: Event) => {
 // when pressing send file button
 const handleSendButton = () => {
   pressedSendButton.value = true;
-  sendOffer(pc, socket, foreignCode);
+  sendOffer(pc.value, socket.value, remoteId);
 };
 
 const onSaveFile = () => {
-  const blob = new Blob(dataReceived.value);
+  const blob = new Blob(receivedData.value);
 
-  if (blob.size === receivedFileDesc.value?.size) {
+  if (blob.size === dataStore.incomingFileDesc?.size) {
     clearInterval(intervalId.value);
-    console.log("in download link!");
     const fileURL = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = fileURL;
-    link.download = receivedFileDesc.value.filename;
+    link.download = dataStore.incomingFileDesc.filename;
     link.click();
   }
 };
 
-// socket.io listeners
-socket.on("connect", () => {
-  // when connected assign the id to the qr component
-  selfCode.value = socket.id ?? "";
-});
-
-socket.on(
-  "get_connection_offer",
-  ({
-    offer,
-    peerId: peerId,
-  }: {
-    offer: RTCSessionDescriptionInit;
-    peerId: string;
-  }) => {
-    foreignCode.value === "" && (foreignCode.value = peerId);
-    handleConnectionOffer({ pc, offer, socket, peerId });
-  }
-);
-
-socket.on(
-  "get_answer",
-  async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-    processAnswer(pc, answer);
-  }
-);
-
-socket.on("get_candidate", ({ candidate }: { candidate: RTCIceCandidate }) => {
-  handleReceivedCandidate(pc, candidate);
-});
-
-socket.on("get_id", ({ peerId }: { peerId: string }) => {
-  foreignCode.value = peerId;
-});
-
 watchEffect(() => {
-  if (selectedFile.value && foreignCode.value) {
+  if (selectedFile.value && remoteId.value) {
     isSendButtonDisabled.value = false;
   }
 });
 
-watch(foreignCode, () => console.log("foreignCode: ", foreignCode.value));
-watch(dataSentSize, () => {
+watch(remoteId, () => console.log("remoteId: ", remoteId.value));
+watch(dataSentSize, async () => {
+  // close the channels if sent the file
   if (
     dataSentSize.value > 0 &&
     dataSentSize.value === selectedFile.value?.size
   ) {
     dataChannel.close();
+    pc.value.close();
   }
 });
 </script>
@@ -235,7 +225,10 @@ watch(dataSentSize, () => {
             a id nisi.
           </p>
         </article>
-        <div role="tablist" class="grow tabs tabs-lifted size-10/12">
+        <div
+          role="tablist"
+          class="grow tabs tabs-lifted size-10/12"
+        >
           <!-- TAB 1 -->
           <input
             type="radio"
@@ -250,9 +243,7 @@ watch(dataSentSize, () => {
             class="tab-content bg-base-100 border-base-300 rounded-box p-6 tab-test"
           >
             <SendTab
-              v-model="foreignCode"
               :is-send-button-disabled="isSendButtonDisabled"
-              :data-sent-size="dataSentSize"
               :selected-file="selectedFile"
               @qr-detect="onCameraDetect"
               @handle-file-selection="onFileSelection"
@@ -272,10 +263,8 @@ watch(dataSentSize, () => {
             class="tab-content bg-base-100 border-base-300 rounded-box p-6"
           >
             <ReceiveTab
-              v-if="selfCode"
-              :self-code="selfCode"
-              :received-file-desc="receivedFileDesc"
-              :data-received-size="dataReceivedSize"
+              v-if="clientId"
+              :client-id="clientId"
               @save-file="onSaveFile"
             />
           </div>
