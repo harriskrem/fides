@@ -1,5 +1,4 @@
 <script setup lang="ts">
-// import { QrcodeStream } from 'vue-qrcode-reader';
 import QrCode from "../QrCode.vue";
 import { CloseIcon } from "@/assets/icons";
 

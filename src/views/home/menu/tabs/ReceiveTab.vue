@@ -41,7 +41,7 @@ const getShareCodeForReceive = () => {
 </script>
 
 <template>
-  <ModalScanQr
+  <modal-scan-qr
     v-model:show-modal="showQrModal"
     :self-code="clientId"
   />
@@ -83,15 +83,15 @@ const getShareCodeForReceive = () => {
         class="btn btn-ghost btn-circle btn-sm"
         @click="toggleQrModal"
       >
-        <ScanQrIcon />
+        <scan-qr-icon />
       </button>
       <button
         id="copyClipboard"
         class="btn btn-ghost btn-circle btn-sm"
         @click="copyToClipboard"
       >
-        <CopySuccessIcon v-if="userClicked" />
-        <CopyIcon v-else />
+        <copy-success-icon v-if="userClicked" />
+        <copy-icon v-else />
       </button>
     </label>
   </div>

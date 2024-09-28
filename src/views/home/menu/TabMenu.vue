@@ -218,7 +218,7 @@ watch(dataSentSize, async () => {
     <div class="sm:hero-content">
       <div class="flex flex-wrap md:flex-nowrap mx-2 sm:mx-40">
         <article class="prose text-center md:text-left mt-10 sm:mt-0">
-          <h1>share_me</h1>
+          <h1>fides</h1>
           <p>
             Provident cupiditate voluptatem et in. Quaerat fugiat ut assumenda
             excepturi exercitationem quasi. In deleniti eaque aut repudiandae et
@@ -242,7 +242,7 @@ watch(dataSentSize, async () => {
             role="tabpanel"
             class="tab-content bg-base-100 border-base-300 rounded-box p-6 tab-test"
           >
-            <SendTab
+            <send-tab
               :is-send-button-disabled="isSendButtonDisabled"
               :selected-file="selectedFile"
               @qr-detect="onCameraDetect"
@@ -262,7 +262,7 @@ watch(dataSentSize, async () => {
             role="tabpanel"
             class="tab-content bg-base-100 border-base-300 rounded-box p-6"
           >
-            <ReceiveTab
+            <receive-tab
               v-if="clientId"
               :client-id="clientId"
               @save-file="onSaveFile"

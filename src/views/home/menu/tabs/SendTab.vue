@@ -40,7 +40,7 @@ const handleOnQrDetect = (detectedCodes: any[]) => {
 </script>
 
 <template>
-  <ModalScanQr
+  <modal-scan-qr
     v-model:show-modal="scanQr"
     :scan-qr="true"
     @camera-detect="handleOnQrDetect"
@@ -60,7 +60,7 @@ const handleOnQrDetect = (detectedCodes: any[]) => {
         class="btn btn-ghost btn-circle btn-sm"
         @click="toggleScan"
       >
-        <ScanQrIcon />
+        <scan-qr-icon />
       </button>
     </label>
   </div>

@@ -1,3 +1,4 @@
+// Hide keys in the future
 const configuration = {
   iceServers: [
     {
