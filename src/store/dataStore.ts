@@ -7,10 +7,12 @@ export const useDataStore = defineStore('data', () => {
   const receivedFileDesc = ref<FileDescription>();
   const receivedChunks = ref<Blob[]>([]);
   const receivedChunkSize = ref<number>(0);
+  const intervalIdRef = ref<any>(null);
 
   const incomingFileDesc = computed(() => receivedFileDesc.value);
   const receivedData = computed(() => receivedChunks.value);
   const receivedDataSize = computed(() => receivedChunkSize.value);
+  const getIntervalId = computed(() => intervalIdRef.value);
 
   const setFileDescription = (value: FileDescription) => {
     receivedFileDesc.value = value;
@@ -20,6 +22,9 @@ export const useDataStore = defineStore('data', () => {
   }
   const setReceivedDataSize = (value: number) => {
     receivedChunkSize.value = value;
+  }
+  const setIntervalId = (value: any) => {
+    intervalIdRef.value = value
   }
 
   // Send refs
@@ -39,6 +44,8 @@ export const useDataStore = defineStore('data', () => {
     receivedDataSize,
     setReceivedDataSize,
     dataSentSize,
-    setDataSentSize
+    setDataSentSize,
+    getIntervalId,
+    setIntervalId
   }
 })

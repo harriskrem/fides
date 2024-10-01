@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import TabPanels from './menu/TabMenu.vue';
+import TabMenu from './menu/TabMenu.vue';
 </script>
 
 <template>
   <main>
-    <tab-panels />
+    <tab-menu />
   </main>
 </template>

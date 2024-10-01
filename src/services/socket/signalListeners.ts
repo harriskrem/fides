@@ -26,8 +26,7 @@ export default function setupSocketListeners(socket: Socket | null) {
 
     socket.on("get_answer", ({ answer }: { answer: RTCSessionDescriptionInit }) => {
       processAnswer(pc.value, answer);
-    }
-    );
+    });
 
     socket.on("get_candidate", ({ candidate }: { candidate: RTCIceCandidate }) => {
       handleReceivedCandidate(pc.value, candidate);
