@@ -3,6 +3,7 @@ import { ScanQrIcon } from "@/assets/icons";
 import ModalScanQr from "@/components/modal/ScanQr.vue";
 import { useDataStore } from "@/store/dataStore";
 import { usePeerStore } from "@/store/peerStore";
+import type { HashFile } from "@/types/HashFile";
 import { computed, ref, toRefs } from "vue";
 
 const props = defineProps<{
@@ -10,7 +11,7 @@ const props = defineProps<{
   onQrDetect: (a: any[]) => void;
   onHandleSendButton: () => void;
   onHandleFileSelection: (a: Event) => void;
-  selectedFile: File | undefined;
+  selectedFile: HashFile | undefined;
 }>();
 const { isSendButtonDisabled, selectedFile } = toRefs(props);
 
@@ -21,12 +22,12 @@ const emit = defineEmits<{
 }>();
 
 const dataStore = useDataStore();
-const dataSentSize = computed(() => dataStore.dataSentSize)
+const filesToSend = computed(() => dataStore.filesToSend);
 const peer = usePeerStore();
 const remoteId = computed({
   get: () => peer.remoteId,
-  set: (value: string) => peer.setRemoteId(value)
-})
+  set: (value: string) => peer.setRemoteId(value),
+});
 
 const scanQr = ref(false);
 const toggleScan = () => (scanQr.value = !scanQr.value);
@@ -85,21 +86,27 @@ const handleOnQrDetect = (detectedCodes: any[]) => {
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <th>{{ selectedFile.name }}</th>
-          <th>{{ selectedFile.size }}</th>
+        <tr
+          v-for="(sendingFile, index) in filesToSend"
+          :key="index"
+        >
+          <th>{{ sendingFile.file.name }}</th>
+          <th>{{ sendingFile.file.size }}</th>
           <th class="sm:w-36">
             <div class="flex justify-center">
               <span
-                v-if="dataSentSize > 0 && dataSentSize === selectedFile?.size"
+                v-if="
+                  sendingFile.progress > 0 &&
+                  sendingFile.progress === sendingFile?.file?.size
+                "
               >
                 Sent!
               </span>
               <progress
                 v-else
                 class="progress sm:w-36"
-                :value="dataSentSize"
-                :max="selectedFile.size"
+                :value="sendingFile.progress"
+                :max="sendingFile.file.size"
               />
             </div>
           </th>

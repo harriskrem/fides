@@ -1,27 +1,27 @@
-import configuration from "@/config/rtcConfig";
-import { usePeerStore } from "@/store/peerStore";
+import { useDataStore } from "@/store/dataStore";
+import type { HashFile } from "@/types/HashFile";
 
-export default function sendChunks(selectedFile: File | undefined, pc: RTCPeerConnection, dataChannel: RTCDataChannel) {
+export default function sendChunks(selectedFile: HashFile | undefined, pc: RTCPeerConnection, dataChannel: RTCDataChannel) {
   console.log("###### CHANNEL OPENED ######");
   const chunkSize = Math.min(
     (pc.sctp as RTCSctpTransport).maxMessageSize,
     26214
   );
-  const peerStore = usePeerStore();
 
   if (selectedFile) {
-    console.log("selectedFile: ", selectedFile);
     try {
-      const file = selectedFile;
+      const hashFile = selectedFile;
       const fileReader = new FileReader();
-
+      const dataStore = useDataStore();
       // Reading file as binary data
-      fileReader.readAsArrayBuffer(file);
+      fileReader.readAsArrayBuffer(hashFile.file);
+      dataStore.setFileToSend(selectedFile);
       dataChannel.send(
         JSON.stringify({
           type: "description",
-          filename: selectedFile.name,
-          size: selectedFile.size,
+          id: selectedFile.id,
+          filename: selectedFile.file.name,
+          size: selectedFile.file.size,
         })
       );
       fileReader.onload = function () {
@@ -33,14 +33,12 @@ export default function sendChunks(selectedFile: File | undefined, pc: RTCPeerCo
             offset += chunkSize
           ) {
             const chunk = fileData.slice(offset, offset + chunkSize);
-            console.log("Sending chunk: ", chunk.byteLength);
             dataChannel.send(chunk);
           }
         } else {
           console.error("File could not be read as ArrayBuffer");
           dataChannel.close();
           pc.close();
-          peerStore.setPeerConnection(new RTCPeerConnection(configuration));
         }
       };
       fileReader.onerror = function (e) {

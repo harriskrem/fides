@@ -6,16 +6,15 @@ import { computed, ref, toRefs } from "vue";
 
 const props = defineProps<{
   clientId: string;
-  onSaveFile: () => void;
+  onSaveFile: (a: string) => void;
 }>();
 const { clientId } = toRefs(props);
 
 defineEmits<{
-  (e: "saveFile"): void;
+  (a: "saveFile", b: string): void;
 }>();
-const dataStore = useDataStore()
-const receivedDataSize = computed(() => dataStore.receivedDataSize);
-const incomingFileDesc = computed(() => dataStore.incomingFileDesc)
+const dataStore = useDataStore();
+const incomingFiles = computed(() => dataStore.filesToReceive);
 const checkedURL = ref<boolean>(false);
 const userClicked = ref<boolean>(false);
 const showQrModal = ref<boolean>(false);
@@ -53,13 +52,15 @@ const getShareCodeForReceive = () => {
       <span
         v-if="checkedURL"
         class="label-text"
-        >Your share URL is:</span
       >
+        Your share URL is:
+      </span>
       <span
         v-else
         class="label-text"
-        >Your share code is:</span
       >
+        Your share code is:
+      </span>
       <div class="form-control">
         <label class="label cursor-pointer">
           <span class="label-text">URL</span>
@@ -96,7 +97,7 @@ const getShareCodeForReceive = () => {
     </label>
   </div>
   <div
-    v-if="incomingFileDesc"
+    v-if="Object.keys(incomingFiles).length > 0"
     class="mockup-window border bg-base-300"
   >
     <table class="table">
@@ -108,26 +109,29 @@ const getShareCodeForReceive = () => {
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <th>{{ incomingFileDesc.filename }}</th>
-          <th>{{ incomingFileDesc.size }}</th>
+        <tr
+          v-for="(receivingFile, index) in incomingFiles"
+          :key="index"
+        >
+          <th>{{ receivingFile.filename }}</th>
+          <th>{{ receivingFile.size }}</th>
           <th class="sm:w-36">
             <div class="flex justify-center">
               <button
                 v-if="
-                  receivedDataSize > 0 &&
-                  receivedDataSize === incomingFileDesc.size
+                  receivingFile.progress > 0 &&
+                  receivingFile.progress === receivingFile.size
                 "
                 class="btn btn-sm btn-secondary"
-                @click="$emit('saveFile')"
+                @click="$emit('saveFile', receivingFile.filename)"
               >
                 Download
               </button>
               <progress
                 v-else
                 class="progress sm:w-36"
-                :value="receivedDataSize"
-                :max="incomingFileDesc.size"
+                :value="receivingFile.progress"
+                :max="receivingFile.size"
               />
             </div>
           </th>

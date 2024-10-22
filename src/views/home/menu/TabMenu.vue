@@ -8,13 +8,12 @@ import saveFile from "@/utils/saveFile";
 import { computed, ref, watch, watchEffect } from "vue";
 import ReceiveTab from "./tabs/ReceiveTab.vue";
 import SendTab from "./tabs/SendTab.vue";
-
+import { v4 as uuidv4 } from "uuid";
+import type { HashFile } from "@/types/HashFile";
 /**
- *
  * TODO:
  * Add feedback connected or disconnected from user
  * multiple files
- * Fix issue where cannot send more than 1 times
  **/
 const peerStore = usePeerStore();
 const dataStore = useDataStore();
@@ -33,15 +32,17 @@ const remoteId = computed(() => peerStore.remoteId);
 const socket = computed(() => socketStore.getSocket);
 
 // Receive tab
-const receivedData = computed(() => dataStore.receivedData);
-
+const filesToReceive = computed(() => dataStore.filesToReceive);
+const recFileId = computed(() => dataStore.recFileId);
+const filesToSend = computed(() => dataStore.filesToSend);
 // Send Tab
-const selectedFile = ref<File | undefined>();
+const sendingFileId = computed(() => dataStore.sendFileId);
+const selectedFile = ref<HashFile | undefined>();
 const isSendButtonDisabled = ref<boolean>(true);
 const pressedSendButton = ref<boolean>(false);
-const dataSentSize = computed(() => dataStore.dataSentSize);
+const intervalId = computed(() => dataStore.getIntervalId);
 
-// for debugging
+// For debugging
 pc.value.addEventListener("iceconnectionstatechange", () => {
   console.log("state: ", pc.value.iceConnectionState);
   if (
@@ -51,36 +52,45 @@ pc.value.addEventListener("iceconnectionstatechange", () => {
     console.log("ICE negotiation successful!");
   }
 });
-
 // Find candidates
 pc.value.addEventListener("icecandidate", (ev) =>
   sendCandidate(ev.candidate, remoteId.value, pc.value, socket.value)
 );
 // Receive chunks
 pc.value.addEventListener("datachannel", (ev) =>
-  receiveChunk(ev, receivedData.value, dataChannel)
+  receiveChunk(ev, filesToReceive.value, dataChannel)
 );
-
 // Send chunks when channel is connected
 dataChannel.onopen = () =>
   sendChunks(selectedFile.value, pc.value, dataChannel);
 
 const onCameraDetect = (detectedCode: any[]) => {
-  console.log("detectedCode: ", detectedCode[0]);
   peerStore.setRemoteId(detectedCode[0].rawValue);
 };
 
 const onFileSelection = (event: Event) => {
   const input = event.target as HTMLInputElement;
   if (input.files?.length) {
-    selectedFile.value = input.files[0];
+    const fileId = uuidv4();
+    selectedFile.value = { id: fileId, file: input.files[0] };
+    dataStore.setFileToSend(selectedFile.value);
   }
 };
-
 // when pressing send file button
 const handleSendButton = () => {
   pressedSendButton.value = true;
-  sendOffer(pc.value, socket.value, remoteId);
+  if (pc.value.iceConnectionState === "new") {
+    console.log("connecting...");
+    sendOffer(pc.value, socket.value, remoteId);
+  } else if (pc.value.iceConnectionState === "connected") {
+    console.log("already connected!");
+    console.log(dataChannel);
+    if (dataChannel.readyState === "open") {
+      if (selectedFile.value) {
+        sendChunks(selectedFile.value, pc.value, dataChannel);
+      }
+    }
+  }
 };
 
 watchEffect(() => {
@@ -89,14 +99,48 @@ watchEffect(() => {
   }
 });
 
-watch(remoteId, () => console.log("remoteId: ", remoteId.value));
-watch(dataSentSize, async () => {
-  // close the channel if sent the file
+watch(filesToSend, async () => {
+  // Close the channel if sent the file
   if (
-    dataSentSize.value > 0 &&
-    dataSentSize.value === selectedFile.value?.size
+    sendingFileId.value &&
+    filesToSend.value[sendingFileId.value].progress > 0 &&
+    filesToSend.value[sendingFileId.value].progress ===
+      filesToSend.value[sendingFileId.value].file.size
   ) {
-    dataChannel.close();
+    console.log("sending completed!");
+    // Send final progress before closing
+    dataChannel.send(
+      JSON.stringify({
+        type: "progress",
+        fileId: sendingFileId.value,
+        progress: filesToSend.value[sendingFileId.value].progress,
+      })
+    );
+    if (intervalId.value) {
+      clearInterval(intervalId.value);
+    }
+  }
+});
+
+watch(filesToReceive, () => {
+  if (
+    recFileId.value &&
+    filesToReceive.value?.[recFileId.value].progress > 0 &&
+    filesToReceive.value?.[recFileId.value].progress ===
+      filesToReceive.value?.[recFileId.value].file?.size
+  ) {
+    console.log("sending completed!");
+    // Send final progress before closing
+    dataChannel.send(
+      JSON.stringify({
+        type: "progress",
+        fileId: recFileId.value,
+        progress: filesToReceive.value[recFileId.value].progress,
+      })
+    );
+    if (intervalId.value) {
+      clearInterval(intervalId.value);
+    }
   }
 });
 </script>
