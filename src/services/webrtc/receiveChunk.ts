@@ -1,48 +1,74 @@
 import { useDataStore } from "@/store/dataStore";
 import type { FileDescription } from "@/types/FileDescription";
-import type { FileProgress } from "@/types/FileProgress";
-import type { ReceiveFile } from "@/types/ReceiveFile";
 
-export default function receiveChunk(ev: RTCDataChannelEvent, receivedData: Record<string, ReceiveFile>, dataChannel: RTCDataChannel) {
+/**
+ * Handles receiving file chunks through WebRTC data channel
+ * @param ev - RTCDataChannel event containing the channel
+ * @param dataChannel - RTCDataChannel instance for sending responses
+ */
+export default function receiveChunk(ev: RTCDataChannelEvent, dataChannel: RTCDataChannel) {
+  // Keeps track of the currently receiving file's ID
+  let currentFileId: string | null = null;
+  // Wh
   ev.channel.onmessage = (event) => {
     const dataStore = useDataStore();
+
+    // Handle control messages (description, complete, progress)
     if (typeof event.data === "string") {
-      const data = JSON.parse(event.data);
-      // if the data is the description or of a file
-      if (data.type === "description") {
-        const fileDesc = data as FileDescription;
-        dataStore.setFileDescription(fileDesc);
-      } else if (data.type === "progress") {
-        // if the receiver sent the progress
-        const fileProgress = data as FileProgress;
-        dataStore.setDataSentProgress(fileProgress);
-      }
-      // else if it's a chunk
-    } else {
-      dataStore.setReceivedChunks(event.data);
-    }
+      try {
+        const data = JSON.parse(event.data);
+        switch (data.type) {
+          // Initialize new file reception when description received
+          case "description":
+            const fileDesc = data as FileDescription;
+            dataStore.setFileDescription(fileDesc);
+            currentFileId = fileDesc.id;
+            break;
+          // Handle file transfer completion
+          case "complete":
+            if (currentFileId === data.id) {
+              if (!currentFileId) break;
+              const receivedFile = dataStore?.filesToReceive[currentFileId];
+              if (receivedFile) {
+                // Send final progress update with total bytes
+                dataChannel.send(JSON.stringify({
+                  type: "progress",
+                  id: currentFileId,
+                  progress: receivedFile.progress
+                }));
+                console.log(`File ${currentFileId} complete. Total size: ${receivedFile.progress} bytes`);
+              }
+              currentFileId = null; // Reset current file ID
+            }
+            break;
 
-    if (Object.keys(receivedData).length > 0 && !dataStore.getIntervalId) {
-      // When received the first chunk initialize an interval
-      // where it sends the received progress to the other peer
-      const intervalId = setInterval(() => {
-        const receivingFileId = dataStore.recFileId;
-        const incomingFiles = dataStore.filesToReceive;
-        if (receivingFileId) {
-          const receivedDataSize = incomingFiles?.[receivingFileId].progress;
-          if (receivedDataSize) {
-            dataChannel.send(
-              JSON.stringify({
-                type: "progress",
-                id: receivingFileId,
-                progress: receivedDataSize,
-              })
-            );
-          }
+          case "progress":
+            // Handle progress updates coming from receiver
+            dataStore.setDataSentProgress({
+              id: data.id,
+              progress: data.progress,
+            });
+            break;
         }
-      }, 500);
+      } catch (e) {
+        console.error("Error parsing message:", e);
+      }
+    } else {
+      // Handle binary chunk data
+      if (currentFileId) {
+        // Store the received chunk
+        dataStore.setReceivedChunks(event.data);
 
-      dataStore.setIntervalId(intervalId);
+        // Send progress update after each chunk
+        const receivedFile = dataStore.filesToReceive[currentFileId];
+        if (receivedFile) {
+          dataChannel.send(JSON.stringify({
+            type: "progress",
+            id: currentFileId,
+            progress: receivedFile.progress // Raw bytes received
+          }));
+        }
+      }
     }
-  };
+  }
 }

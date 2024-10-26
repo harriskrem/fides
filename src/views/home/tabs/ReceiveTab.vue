@@ -110,8 +110,8 @@ const getShareCodeForReceive = () => {
       </thead>
       <tbody>
         <tr
-          v-for="(receivingFile, index) in incomingFiles"
-          :key="index"
+          v-for="(receivingFile, fileHash) in incomingFiles"
+          :key="fileHash"
         >
           <th>{{ receivingFile.filename }}</th>
           <th>{{ receivingFile.size }}</th>
@@ -123,7 +123,7 @@ const getShareCodeForReceive = () => {
                   receivingFile.progress === receivingFile.size
                 "
                 class="btn btn-sm btn-secondary"
-                @click="$emit('saveFile', receivingFile.filename)"
+                @click="$emit('saveFile', fileHash)"
               >
                 Download
               </button>

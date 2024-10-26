@@ -3,7 +3,6 @@ import { ScanQrIcon } from "@/assets/icons";
 import ModalScanQr from "@/components/modal/ScanQr.vue";
 import { useDataStore } from "@/store/dataStore";
 import { usePeerStore } from "@/store/peerStore";
-import type { HashFile } from "@/types/HashFile";
 import { computed, ref, toRefs } from "vue";
 
 const props = defineProps<{
@@ -11,9 +10,8 @@ const props = defineProps<{
   onQrDetect: (a: any[]) => void;
   onHandleSendButton: () => void;
   onHandleFileSelection: (a: Event) => void;
-  selectedFile: HashFile | undefined;
 }>();
-const { isSendButtonDisabled, selectedFile } = toRefs(props);
+const { isSendButtonDisabled } = toRefs(props);
 
 const emit = defineEmits<{
   (e: "handleSendButton"): void;
@@ -74,7 +72,7 @@ const handleOnQrDetect = (detectedCodes: any[]) => {
     />
   </div>
   <div
-    v-if="selectedFile"
+    v-if="Object.keys(filesToSend).length"
     class="my-2 mockup-window border bg-base-300"
   >
     <table class="table">
